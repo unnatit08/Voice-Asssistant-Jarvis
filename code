@@ -1,0 +1,220 @@
+import pyttsx3  # pip install pyttsx3
+import speech_recognition as sr  # pip install speechRecognition
+import datetime
+import wikipedia  # pip install wikipedia
+import webbrowser
+import os
+import smtplib
+import requests
+import vlc  # pip install python-vlc
+from bs4 import BeautifulSoup  # pip install beautifulsoup4
+import whisper 
+from PyDictionary import PyDictionary
+
+# Initialize the pyttsx3 engine
+engine = pyttsx3.init('sapi5')
+voices = engine.getProperty('voices')
+engine.setProperty('voice', voices[0].id)  # Set voice; change index to change voice
+
+# Initialize VLC media player
+vlc_instance = vlc.Instance()
+player = vlc_instance.media_player_new()
+
+def speak(audio):
+    """Speak the provided audio text."""
+    engine.say(audio)
+    engine.runAndWait()
+
+def wishMe():
+    """Wish the user based on the current time."""
+    hour = int(datetime.datetime.now().hour)
+    if 0 <= hour < 12:
+        speak("Good Morning!")
+    elif 12 <= hour < 18:
+        speak("Good Afternoon!")
+    else:
+        speak("Good Evening!")
+    speak("I am jarvis, Please tell me how may I help you?")
+
+def takeCommand():
+    """
+    Take microphone input from the user and return the string output.
+    Adjusts for ambient noise and listens for a command.
+    """
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Listening...")
+        r.adjust_for_ambient_noise(source)  # Adjust for ambient noise
+        r.pause_threshold = 1  # Wait for 1 second of silence before ending the listening
+        audio = r.listen(source)
+
+    try:
+        print("Recognizing...")
+        query = r.recognize_google(audio, language='en-in')
+        print(f"User said: {query}\n")
+    except Exception as e:
+        print("Say that again please...")
+        return "None"
+    return query
+
+def sendEmail(to, content):
+    """Send an email to the specified recipient with the given content."""
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.ehlo()
+        server.starttls()
+        server.login('youremail@gmail.com', 'your-password')  # Use environment variables for security
+        server.sendmail('youremail@gmail.com', to, content)
+        server.close()
+        speak("Email has been sent!")
+    except Exception as e:
+        print(e)
+        speak("Sorry, I am not able to send this email")
+
+def get_weather():
+    api_key = "14c40539d153c440339ce7ce56232a84"
+    base_url = "http://api.openweathermap.org/data/2.5/weather"
+    city = "New Delhi"  # Replace with your city
+    complete_url = base_url + "?q=" + city + "&appid=" + api_key
+    try:
+        response = requests.get(complete_url)
+        data = response.json()
+        weather = data["weather"][0]["description"]
+        temp = data["main"]["temp"]
+        temp_in_celsius = temp - 273.15  # Convert Kelvin to Celsius
+        speak(f"The current weather in {city} is {weather} with a temperature of {temp_in_celsius:.2f} degrees Celsius")
+    except Exception as e:
+        print(e)
+
+vlc_instance = vlc.Instance()
+player = vlc_instance.media_player_new()
+
+speak = pyttsx3.init()
+
+def play_song(song_name):
+    """Search and play a song using VLC media player."""
+    speak(f"Playing {song_name}")
+    query = song_name.replace(' ', '+')
+    url = f"https://www.youtube.com/results?search_query={query}"
+
+    # Fetch HTML content of YouTube search results
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # Find all YouTube video links on the search results page
+    video_links = soup.find_all('a', href=True)
+    video_url = None
+
+    # Look for the first video link that is not an ad
+    for link in video_links:
+        href = link['href']
+        if href.startswith('/watch?v='):
+            video_url = f"https://www.youtube.com{href}"
+            break
+
+    if video_url:
+        # Use pafy to get the best audio stream
+        import pafy
+        video = pafy.new(video_url)
+        best_audio = video.getbestaudio()
+        media = vlc_instance.media_new(best_audio.url)
+        player.set_media(media)
+        player.play()
+    else:
+        speak("Sorry, I couldn't find the song on YouTube.")
+
+play_song("your song name")
+
+def stop_song():
+    """Stop the currently playing song."""
+    player.stop()
+    speak("Song stopped")
+
+def wake_up():
+    """Wake up Jarvis when the trigger phrase is detected."""
+    while True:
+        query = takeCommand().lower()
+        if 'hello jarvis' in query:
+            speak("Hello Unnati!")
+            wishMe()
+            break
+
+class Dictionary:
+    def __init__(self):
+        self.speak = Speaking()
+        self.dic = PyDictionary()
+
+    def find_meaning(self):
+        self.speak.speak("Which word do you want to find the meaning of?")
+        query = takeCommand()
+        word_meaning = self.dic.meaning(query)
+        if word_meaning:
+            for part_of_speech, meanings in word_meaning.items():
+                self.speak.speak(f"The {part_of_speech} meanings are:")
+                for meaning in meanings:
+                    print(meaning)
+                    self.speak.speak(meaning)
+        else:
+            self.speak.speak(f"Sorry, I couldn't find the meaning of the word '{query}'.")
+
+class Speaking:
+    def __init__(self):
+        self.engine = pyttsx3.init('sapi5')
+        voices = self.engine.getProperty('voices')
+        self.engine.setProperty('voice', voices[0].id)
+
+    def speak(self, audio):
+        self.engine.say(audio)
+        self.engine.runAndWait()
+
+if __name__ == "__main__":
+    wake_up()
+    dictionary = Dictionary()
+    while True:
+        query = takeCommand().lower()
+
+        # Logic for executing tasks based on query
+        if 'wikipedia' in query:
+            speak('Searching Wikipedia...')
+            query = query.replace("wikipedia", "")
+            results = wikipedia.summary(query, sentences=2)
+            speak("According to Wikipedia")
+            print(results)
+            speak(results)
+
+        elif 'jarvis open youtube' in query:
+            webbrowser.open("youtube.com")
+
+        elif 'jarvis open google' in query:
+            webbrowser.open("google.com")
+
+        elif 'jarvis open linkedin' in query:
+            webbrowser.open("linkedin.com")
+
+        elif 'jarvis what is the time' in query:
+            strTime = datetime.datetime.now().strftime("%H:%M:%S")
+            speak(f"The time is {strTime}")
+
+        elif 'jarvis send an email to unnati' in query:
+            try:
+                speak("What should I say?")
+                content = takeCommand()
+                to = "tunnati89@gmail.com"
+                sendEmail(to, content)
+            except Exception as e:
+                print(e)
+                speak("Sorry, I am not able to send this email")
+
+        elif 'jarvis how is the weather' in query:
+            get_weather()
+
+        elif 'jarvis play song' in query:
+            speak("Which song would you like to play?")
+            song_name = takeCommand().lower()
+            play_song(song_name)
+
+        elif 'jarvis stop the song' in query:
+            stop_song()
+
+        elif 'jarvis find meaning' in query:
+            dictionary.find_meaning()
